@@ -19,9 +19,6 @@
 name: Release Build
 
 on:
-  push:
-    tags:
-      - "v[0-9]+.[0-9]+.[0-9]+*"
   workflow_dispatch:
     inputs:
       version:
@@ -67,32 +64,42 @@ jobs:
         with:
           run_install: false
 
-      - name: Import GPG key
-        if: github.event_name == 'workflow_dispatch'
-        uses: crazy-max/ghaction-import-gpg@v6
-        with:
-          gpg_private_key: ${{ secrets.BOT_GPG_PRIVATE_KEY }}
-          passphrase: ${{ secrets.BOT_GPG_PASSPHRASE }}
-          git_user_signingkey: true
-          git_commit_gpgsign: true
-          git_tag_gpgsign: true
-
-      - name: Setup CI Bot
-        if: github.event_name == 'workflow_dispatch'
-        run: |
-          git config user.name "The OpenList Bot"
-          git config user.email "bot@openlist.team"
-
       - name: Update package.json and commit
         if: github.event_name == 'workflow_dispatch'
         run: |
-          jq --arg version "${{ steps.semver.outputs.version }}" '.version = $version' package.json > package.json.tmp && mv package.json.tmp package.json
-          git add package.json
-          git commit -S -m "chore: release v${{ steps.semver.outputs.version }}" --no-verify
-          git push
+          git config user.name "GitHub Actions"
+          git config user.email "actions@github.com"
 
-          # For local build, needn't push, the tag will be created by `gh release create`
-          git tag -s "v${{ steps.semver.outputs.version }}" -m "Release v${{ steps.semver.outputs.version }}"
+          # 获取当前版本
+          CURRENT_VERSION=$(jq -r '.version' package.json)
+          NEW_VERSION="${{ steps.semver.outputs.version }}"
+
+          echo "Current version: $CURRENT_VERSION"
+          echo "New version: $NEW_VERSION"
+
+          # 检查版本是否需要更新
+          if [ "$CURRENT_VERSION" != "$NEW_VERSION" ]; then
+            echo "Updating version from $CURRENT_VERSION to $NEW_VERSION"
+            jq --arg version "$NEW_VERSION" '.version = $version' package.json > package.json.tmp && mv package.json.tmp package.json
+            git add package.json
+            git commit -m "chore: release v$NEW_VERSION" --no-verify
+            git push
+          else
+            echo "Version is already $NEW_VERSION, no need to update package.json"
+          fi
+
+          # 检查标签是否已存在
+          if ! git rev-parse "v$NEW_VERSION" >/dev/null 2>&1; then
+            # 标签不存在，创建新标签
+            echo "Creating tag v$NEW_VERSION"
+            git tag "v$NEW_VERSION" -m "Release v$NEW_VERSION"
+          else
+            echo "Tag v$NEW_VERSION already exists"
+          fi
+
+          # 确保将标签推送到远程仓库
+          echo "Pushing tag v$NEW_VERSION to remote repository"
+          git push origin "v$NEW_VERSION"
 
       - name: Get current tag
         id: get_current_tag
@@ -101,8 +108,18 @@ jobs:
           # This is necessary to avoid conflicts with the changelog generation
           git tag -d rolling 2>/dev/null || true
 
-          # Get the current tag
-          CURRENT_TAG=$(git describe --tags --abbrev=0)
+          # First try to get tag from current repo
+          LOCAL_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+
+          if [ -n "$LOCAL_TAG" ]; then
+            # Use local tag if available
+            CURRENT_TAG=$LOCAL_TAG
+          else
+            # Fetch latest tag from GitHub API if no local tag
+            CURRENT_TAG=$(curl -s https://api.github.com/repos/OpenListTeam/OpenList-Frontend/tags | jq -r ".[0].name" || echo "v0.0.0")
+            echo "Using latest tag from GitHub: $CURRENT_TAG"
+          fi
+
           echo "current_tag=$CURRENT_TAG" >> $GITHUB_OUTPUT
 
           # Temporarily remove all pre-release tags (tags containing '-' / '+')
@@ -132,78 +149,22 @@ jobs:
           CROWDIN_PROJECT_ID: ${{ secrets.CROWDIN_PROJECT_ID }}
           CROWDIN_PERSONAL_TOKEN: ${{ secrets.CROWDIN_PERSONAL_TOKEN }}
 
-      - name: Checkout lite version code
-        uses: actions/checkout@v4
-        with:
-          ref: lite
-          path: lite
-          fetch-depth: 0
-          submodules: recursive
-
-      - name: Setup CI Bot
-        if: github.event_name == 'workflow_dispatch'
-        working-directory: ./lite
-        run: |
-          git config user.name "The OpenList Bot"
-          git config user.email "bot@openlist.team"
-
-      - name: Update package.json and commit
-        if: github.event_name == 'workflow_dispatch'
-        working-directory: ./lite
-        run: |
-          jq --arg version "${{ steps.semver.outputs.version }}" '.version = $version' package.json > package.json.tmp && mv package.json.tmp package.json
-          git add package.json
-          git commit -S -m "chore: release v${{ steps.semver.outputs.version }}" --no-verify
-          git push
-
-      - name: Build Lite Release
-        run: |
-          rm -rf .git
-          cp -r ../.git .git
-          chmod +x build.sh
-          ./build.sh --release --compress --lite
-        working-directory: ./lite
-        env:
-          CROWDIN_PROJECT_ID: ${{ secrets.CROWDIN_PROJECT_ID }}
-          CROWDIN_PERSONAL_TOKEN: ${{ secrets.CROWDIN_PERSONAL_TOKEN }}
-
       - name: Upload Release Assets
         run: |
-          # Delete local tag, or gh cli will complain about it.
-          git tag -d ${{ steps.get_current_tag.outputs.current_tag }}
-          gh release create \
-            --title "Release ${{ steps.get_current_tag.outputs.current_tag }}" \
+          # 使用用户指定的版本号
+          VERSION="${{ steps.semver.outputs.version }}"
+          RELEASE_TAG="v$VERSION"
+
+          echo "Creating GitHub release for tag: $RELEASE_TAG"
+
+          # 创建 GitHub Release
+          gh release create "$RELEASE_TAG" \
+            --title "Release $RELEASE_TAG" \
             --notes-file "${{ github.workspace }}-CHANGELOG.txt" \
             --prerelease=${{ steps.check_pre_release.outputs.is_pre_release }} \
-            ${{ steps.get_current_tag.outputs.current_tag }} \
-            dist/openlist-frontend-dist-v*.tar.gz lite/dist/openlist-frontend-dist-lite-v*.tar.gz dist/i18n.tar.gz
+            dist/openlist-frontend-dist-v*.tar.gz dist/i18n.tar.gz
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Publish npm
-        run: |
-          echo "//registry.npmjs.org/:_authToken=${NODE_AUTH_TOKEN}" > ~/.npmrc
-          # Delete the generated dist tarball
-          rm -f dist/openlist-frontend-dist-v*.tar.gz
-          rm -f lite/dist/openlist-frontend-dist-lite-v*.tar.gz
-          # Copy the lite version
-          mkdir dist/lite
-          cp -r lite/dist/. dist/lite/
-
-          if ! jq -e '.name and .version' package.json > /dev/null; then
-            echo "Error: Invalid package.json"
-            exit 1
-          fi
-
-          if [ -z "${{ secrets.NPM_TOKEN }}" ]; then
-            echo "NPM_TOKEN not set, performing dry run"
-            pnpm publish --dry-run --no-git-checks --access public
-          else
-            echo "Publishing to npm..."
-            pnpm publish --no-git-checks --access public
-          fi
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
 permissions:
   contents: write
