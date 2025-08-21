@@ -24,7 +24,3 @@ if (api === "/") {
 if (api.endsWith("/")) {
   api = api.slice(0, -1)
 }
-
-export const monaco_cdn =
-  window.OPENLIST_CONFIG.monaco_cdn ||
-  "https://lf3-cdn-tos.bytecdntp.com/cdn/expire-1-M/monaco-editor/0.33.0-dev.20220228/min/vs"

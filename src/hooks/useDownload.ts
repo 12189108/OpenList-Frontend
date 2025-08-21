@@ -26,7 +26,7 @@ async function getSaveDir(rpc_url: string, rpc_secret: string) {
     id: Math.random().toString(),
     jsonrpc: "2.0",
     method: "aria2.getGlobalOption",
-    params: ["token:" + rpc_secret ?? ""],
+    params: ["token:" + (rpc_secret ?? "")],
   })
   console.log(resp)
   if (resp.status === 200) {
@@ -40,7 +40,7 @@ async function getSaveDir(rpc_url: string, rpc_secret: string) {
 export const useDownload = () => {
   const { rawLinks } = useSelectedLink()
   const t = useT()
-  const { pathname } = useRouter()
+  const { pathname, isShare } = useRouter()
   return {
     batchDownloadSelected: () => {
       const urls = rawLinks(true)
@@ -63,6 +63,7 @@ export const useDownload = () => {
                 pathJoin(pathname(), pre),
                 obj,
                 "direct",
+                isShare(),
                 true,
               ),
               name: obj.name,
@@ -140,7 +141,7 @@ export const useDownload = () => {
                 jsonrpc: "2.0",
                 method: "aria2.addUri",
                 params: [
-                  "token:" + aria2_rpc_secret ?? "",
+                  "token:" + (aria2_rpc_secret ?? ""),
                   [res[key].url],
                   {
                     out: res[key].name,
