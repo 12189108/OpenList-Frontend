@@ -10,6 +10,7 @@
       "selected": "已选中 {{folders}} 个文件夹，{{files}} 个文件",
       "selected_folders": "已选中 {{folders}} 个文件夹",
       "selected_files": "已选中 {{files}} 个文件"
+    }
     },
     "preview": {
       "download": "下载",
@@ -218,4 +219,4 @@
       "skip_existing": "跳过现有文件"
     }
   }
-}
+
