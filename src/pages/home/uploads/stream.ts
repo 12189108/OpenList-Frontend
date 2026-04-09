@@ -1,4 +1,4 @@
-import { password } from "~/store"
+ï»¿import { password } from "~/store"
 import { EmptyResp } from "~/types"
 import { r } from "~/utils"
 import { asyncPool } from "~/utils/async_pool"
@@ -265,14 +265,15 @@ export const StreamUpload: Upload = async (
       ? await getChunkSession(storedSession.uploadId)
       : undefined
 
-    const resumed =
+    const sessionMatches =
       !!session &&
       session.path === uploadPath &&
       session.size === file.size &&
-      session.hashes.sha256 === hashes.sha256 &&
-      (session.uploaded_chunks?.length ?? 0) > 0
+      session.hashes.sha256 === hashes.sha256
 
-    if (!session || session.path !== uploadPath || session.size !== file.size || session.hashes.sha256 !== hashes.sha256) {
+    const resumed = sessionMatches && (session.uploaded_chunks?.length ?? 0) > 0
+
+    if (!sessionMatches) {
       session = await initChunkSession(uploadPath, file, hashes, overwrite)
       setStoredSession(uploadPath, file, session.upload_id)
     }
@@ -306,10 +307,10 @@ export const StreamUpload: Upload = async (
     if (resumed) {
       setUpload(
         "hint",
-        `ÒÑ»Ö¸´Ðø´«£¬ÒÑÉÏ´« ${session.uploaded_chunks.length}/${session.total_chunks} ¸ö·ÖÆ¬`,
+        `å·²æ¢å¤ç»­ä¼ ï¼Œå·²ä¸Šä¼  ${session.uploaded_chunks.length}/${session.total_chunks} ä¸ªåˆ†ç‰‡`,
       )
     } else {
-      setUpload("hint", `·ÖÆ¬ÉÏ´« 0/${session.total_chunks}`)
+      setUpload("hint", `åˆ†ç‰‡ä¸Šä¼  0/${session.total_chunks}`)
     }
 
     const pendingChunkIndexes = Array.from(
@@ -326,12 +327,18 @@ export const StreamUpload: Upload = async (
         const end = Math.min(start + session!.chunk_size, file.size)
         const chunk = file.slice(start, end)
         chunkLoadedMap.set(chunkIndex, 0)
-        await uploadChunk(session!.upload_id, chunkIndex, chunk, file, (index, loaded) => {
-          chunkLoadedMap.set(index, loaded)
-          updateOverallProgress()
-        })
+        await uploadChunk(
+          session!.upload_id,
+          chunkIndex,
+          chunk,
+          file,
+          (index, loaded) => {
+            chunkLoadedMap.set(index, loaded)
+            updateOverallProgress()
+          },
+        )
         uploadedChunkCount += 1
-        setUpload("hint", `·ÖÆ¬ÉÏ´« ${uploadedChunkCount}/${session!.total_chunks}`)
+        setUpload("hint", `åˆ†ç‰‡ä¸Šä¼  ${uploadedChunkCount}/${session!.total_chunks}`)
       },
     )) {
       // consume async pool results
