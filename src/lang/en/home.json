@@ -137,12 +137,16 @@
     "upload_folder": "Choose Folder",
     "hashing": "Hashing",
     "pending": "Pending",
+    "resuming": "Resuming",
     "uploading": "Uploading",
     "backending": "Uploading in the backend",
     "success": "Success",
     "error": "Error",
     "back": "Back to Upload",
-    "clear_done": "Clear Done"
+    "clear_done": "Clear Done",
+    "resumed_session": "Resumed session: {{uploaded}} / {{total}} chunks already uploaded",
+    "resuming_session": "Resuming upload from existing session",
+    "chunk_uploading": "Chunk upload: {{done}} / {{total}}"
   },
   "local_settings": {
     "aria2_rpc_url": "Aria2 RPC URL",

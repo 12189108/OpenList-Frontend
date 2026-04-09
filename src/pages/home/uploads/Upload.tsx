@@ -68,6 +68,9 @@ const UploadFile = (props: UploadFileProps) => {
         <ProgressIndicator color={getMainColor()} rounded="$md" />
         {/* <ProgressLabel /> */}
       </Progress>
+      <Show when={props.hint}>
+        <Text color="$neutral11">{props.hint}</Text>
+      </Show>
       <Text color="$danger10">{props.msg}</Text>
     </VStack>
   )
