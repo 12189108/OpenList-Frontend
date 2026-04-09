@@ -113,7 +113,6 @@ jobs:
           fi
 
           # Add back the current tag if is a pre-release
-          # 【修复】去掉了 -s (GPG签名)，改为 -a (附注标签)
           if [[ "${{ steps.check_pre_release.outputs.is_pre_release }}" == "true" ]]; then
             git tag -a "$CURRENT_TAG" -m "Release $CURRENT_TAG"
           fi
@@ -123,10 +122,26 @@ jobs:
         run: |
           npx changelogithub --output ${{ github.workspace }}-CHANGELOG.txt || echo "" > ${{ github.workspace }}-CHANGELOG.txt
 
+      - name: Fetch latest i18n from upstream
+        run: |
+          echo "Fetching latest i18n from official OpenListTeam repository..."
+          # 调用 GitHub API 获取官方仓库最新一次 Release 的信息，从中提取 i18n.tar.gz 的下载链接
+          I18N_URL=$(curl -s https://api.github.com/repos/OpenListTeam/OpenList-Frontend/releases/latest | jq -r '.assets[] | select(.name == "i18n.tar.gz") | .browser_download_url')
+          
+          if [ -n "$I18N_URL" ] && [ "$I18N_URL" != "null" ]; then
+            echo "Found upstream i18n URL: $I18N_URL"
+            curl -L -o upstream_i18n.tar.gz "$I18N_URL"
+            mkdir -p src/lang
+            tar -xzvf upstream_i18n.tar.gz -C src/lang/
+            echo "Successfully injected upstream translations into src/lang/"
+          else
+            echo "Warning: Could not find i18n.tar.gz in upstream latest release."
+          fi
+
       - name: Build Release
         run: |
           chmod +x build.sh
-          # 【修复】添加 --skip-i18n 防止没有 Crowdin token 时报错崩溃
+          # 使用 --skip-i18n，因为我们已经在上一步手动把官方翻译下载并解压好了
           ./build.sh --release --compress --skip-i18n
         env:
           CROWDIN_PROJECT_ID: ${{ secrets.CROWDIN_PROJECT_ID }}
