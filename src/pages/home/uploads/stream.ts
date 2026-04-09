@@ -10,8 +10,6 @@ const CHUNK_CONCURRENCY = 3
 const SESSION_STORAGE_KEY = "openlist_chunk_upload_sessions"
 
 type FileHashes = {
-  md5: string
-  sha1: string
   sha256: string
 }
 
@@ -126,8 +124,6 @@ const initChunkSession = async (
       total_chunks: Math.ceil(file.size / CHUNK_SIZE),
       last_modified: file.lastModified,
       mimetype: file.type || "application/octet-stream",
-      md5: hashes.md5,
-      sha1: hashes.sha1,
       sha256: hashes.sha256,
     },
     {
@@ -202,13 +198,11 @@ const legacyStreamUpload = async (
     Overwrite: overwrite.toString(),
   }
   if (rapid) {
-    const { md5, sha1, sha256 } =
+    const { sha256 } =
       precomputedHashes ??
       (await calculateHash(file, (p) => {
         setUpload("progress", p | 0)
       }))
-    headers["X-File-Md5"] = md5
-    headers["X-File-Sha1"] = sha1
     headers["X-File-Sha256"] = sha256
   }
   setUpload("status", "uploading")
@@ -261,9 +255,10 @@ export const StreamUpload: Upload = async (
   try {
     setUpload("status", "hashing")
     setUpload("hint", undefined)
-    hashes = await calculateHash(file, (p) => {
+    const hashResult = await calculateHash(file, (p) => {
       setUpload("progress", p | 0)
     })
+    hashes = { sha256: hashResult.sha256 }
 
     const storedSession = getStoredSession(uploadPath, file)
     let session = storedSession
@@ -274,9 +269,10 @@ export const StreamUpload: Upload = async (
       !!session &&
       session.path === uploadPath &&
       session.size === file.size &&
-      session.hashes.sha256 === hashes.sha256
+      session.hashes.sha256 === hashes.sha256 &&
+      (session.uploaded_chunks?.length ?? 0) > 0
 
-    if (!resumed) {
+    if (!session || session.path !== uploadPath || session.size !== file.size || session.hashes.sha256 !== hashes.sha256) {
       session = await initChunkSession(uploadPath, file, hashes, overwrite)
       setStoredSession(uploadPath, file, session.upload_id)
     }
@@ -306,18 +302,14 @@ export const StreamUpload: Upload = async (
     }
 
     speedState.oldLoaded = updateOverallProgress()
+    setUpload("status", "uploading")
     if (resumed) {
-      setUpload("status", "resuming")
       setUpload(
         "hint",
-        `Resumed session: ${session.uploaded_chunks.length} / ${session.total_chunks} chunks already uploaded`,
+        `已恢复续传，已上传 ${session.uploaded_chunks.length}/${session.total_chunks} 个分片`,
       )
     } else {
-      setUpload("status", "uploading")
-      setUpload(
-        "hint",
-        `Chunk upload: ${session.uploaded_chunks.length} / ${session.total_chunks}`,
-      )
+      setUpload("hint", `分片上传 0/${session.total_chunks}`)
     }
 
     const pendingChunkIndexes = Array.from(
@@ -339,11 +331,7 @@ export const StreamUpload: Upload = async (
           updateOverallProgress()
         })
         uploadedChunkCount += 1
-        setUpload("status", uploadedChunkCount < session!.total_chunks ? "resuming" : "uploading")
-        setUpload(
-          "hint",
-          `Chunk upload: ${uploadedChunkCount} / ${session!.total_chunks}`,
-        )
+        setUpload("hint", `分片上传 ${uploadedChunkCount}/${session!.total_chunks}`)
       },
     )) {
       // consume async pool results
