@@ -5,7 +5,7 @@ import { asyncPool } from "~/utils/async_pool"
 import { SetUpload, Upload } from "./types"
 import { calculateHash } from "./util"
 
-const CHUNK_SIZE = 10 * 1024 * 1024
+const CHUNK_SIZE = 25 * 1024 * 1024
 const CHUNK_CONCURRENCY = 3
 const SESSION_STORAGE_KEY = "openlist_chunk_upload_sessions"
 
