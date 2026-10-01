@@ -47,6 +47,7 @@ parse_args() {
             --enforce-tag) ENFORCE_TAG="true"; shift ;;
             --skip-i18n) SKIP_I18N="true"; shift ;;
             --lite) LITE_FLAG="true"; shift ;;
+            --version) VERSION=${2:?Missing --version value}; shift 2 ;;
             -h|--help) display_help; exit 0 ;;
             *) log_error "Unknown option: $1"; display_help; exit 1 ;;
         esac
@@ -65,6 +66,7 @@ display_help() {
     echo "  --enforce-tag Force git tag requirement for both dev and release builds"
     echo "  --skip-i18n   Skip i18n build step"
     echo "  --lite        Build lite version"
+    echo "  --version VER Explicit release label, accepts v prefix; no git tag required"
     echo ""
     echo "Environment variables:"
     echo "  OPENLIST_FRONTEND_BUILD_MODE=dev|release (default: dev)"
@@ -84,7 +86,14 @@ set_defaults() {
 
 # Check git version and commit
 check_git_version_and_commit() {
-    if [[ "$BUILD_TYPE" == "release" || "$ENFORCE_TAG" == "true" ]]; then
+    if [[ -n "${VERSION:-}" && "$BUILD_TYPE" == "release" && "$ENFORCE_TAG" != "true" ]]; then
+        git_version_clean=${VERSION#v}
+        if [[ ! "$git_version_clean" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?$ ]]; then
+            log_error "Invalid version: $VERSION"
+            exit 1
+        fi
+        git_version="v$git_version_clean"
+    elif [[ "$BUILD_TYPE" == "release" || "$ENFORCE_TAG" == "true" ]]; then
         enforce_git_tag
     else
         fallback_git_tag
@@ -133,6 +142,9 @@ update_package_version() {
         version_tag="v${git_version_clean}-${commit}"
         log_build "Building DEV version ${version_tag}..."
     elif [[ "$BUILD_TYPE" == "release" ]]; then
+        if [[ -n "${VERSION:-}" ]]; then
+            node --input-type=commonjs -e 'const fs=require("fs"); const p=JSON.parse(fs.readFileSync("package.json","utf8")); p.version=process.argv[1]; fs.writeFileSync("package.json",JSON.stringify(p,null,2)+"\n")' "$git_version_clean"
+        fi
         version_tag="v${git_version_clean}"
         log_build "Building RELEASE version ${version_tag}..."
     else

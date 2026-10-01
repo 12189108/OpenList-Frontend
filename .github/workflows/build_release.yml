@@ -1,12 +1,16 @@
-name: Custom Frontend Release
+name: Custom Frontend Build
 
 on:
   workflow_dispatch:
     inputs:
       version:
-        description: "Frontend version (e.g. 4.2.6-custom.1)"
-        required: true
+        description: "前端版本号（可带 v）；留空获取官方最新正式版号，编译当前分支"
+        required: false
         type: string
+      publish:
+        description: "同时发布 GitHub Release（版本标签必须尚不存在）"
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -16,64 +20,46 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  release:
+  build:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout code
+      - name: Checkout source
         uses: actions/checkout@v7
-        with:
-          fetch-depth: 0
-
-      - name: Validate semver
-        id: semver
-        uses: matt-usurp/validate-semver@v3.0.0
-        with:
-          version: ${{ inputs.version }}
 
       - name: Setup Node
         uses: actions/setup-node@v7
         with:
-          node-version: "24.20.0"
+          node-version: "24"
 
       - name: Setup pnpm from packageManager
         uses: pnpm/action-setup@v6
 
-      - name: Prepare release version and local tag
-        env:
-          VERSION: ${{ steps.semver.outputs.version }}
-        run: |
-          if git show-ref --verify --quiet "refs/tags/v$VERSION"; then
-            echo "Release tag already exists: v$VERSION" >&2
-            exit 1
-          fi
-          git config user.name github-actions[bot]
-          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
-          jq --arg version "$VERSION" '.version = $version' package.json > package.json.tmp
-          mv package.json.tmp package.json
-          git add package.json
-          if ! git diff --cached --quiet; then
-            git -c core.hooksPath=/dev/null commit -m "chore(release): prepare frontend v$VERSION"
-          fi
-          git tag -a "v$VERSION" -m "Release v$VERSION"
-
-      - name: Build release using official translations
-        run: |
-          bash build.sh --release --compress --skip-i18n
-          pnpm lint
-          pnpm test:resumable
-
-      - name: Push release commit and tag
-        env:
-          VERSION: ${{ steps.semver.outputs.version }}
-        run: |
-          git push --atomic origin "HEAD:refs/heads/$GITHUB_REF_NAME" "refs/tags/v$VERSION"
-
-      - name: Publish custom release
+      - name: Compile frontend
+        id: build
         env:
           GH_TOKEN: ${{ github.token }}
-          VERSION: ${{ steps.semver.outputs.version }}
-          IS_PRERELEASE: ${{ steps.semver.outputs.prerelease != '' }}
+          VERSION: ${{ inputs.version }}
+        run: bash scripts/build-custom.sh
+
+      - name: Upload frontend archives
+        uses: actions/upload-artifact@v4
+        with:
+          name: openlist-frontend-${{ steps.build.outputs.version }}
+          path: dist/*.tar.gz
+          if-no-files-found: error
+
+      - name: Publish custom release
+        if: inputs.publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.build.outputs.version }}
         run: |
-          gh release create "v$VERSION" --verify-tag --title "Release v$VERSION" \
-            --generate-notes --prerelease="$IS_PRERELEASE" \
-            "dist/openlist-frontend-dist-v$VERSION.tar.gz" dist/i18n.tar.gz
+          if gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$VERSION" >/dev/null 2>&1; then
+            echo "标签 $VERSION 已存在，请指定新的自定义版本号。" >&2
+            exit 1
+          fi
+          args=()
+          if [[ "$VERSION" == *-* ]]; then args+=(--prerelease); fi
+          gh release create "$VERSION" --target "$GITHUB_SHA" --title "Release $VERSION" \
+            --generate-notes "${args[@]}" \
+            "dist/openlist-frontend-dist-$VERSION.tar.gz" dist/i18n.tar.gz
