@@ -2,6 +2,10 @@
 
 在 GitHub Actions 运行 **Custom Frontend Build**，选择需要编译的分支。`version` 可指定 `4.2.6-custom.1` 或 `v4.2.6-custom.1`；留空从 `OpenListTeam/OpenList-Frontend` 获取最新正式版本号。始终编译所选分支的源码，不切回官方发行版。
 
+所有前端工作流均改为仅手动触发。push、PR 和定时任务不再自动启动。
+
+原 `build.sh` 的正式版和开发版也按指定版本或最新正式 Release 取版本号，不使用本地标签历史或 commit。开发版标签为 `v版本号-dev`，不附加提交 SHA；不要求创建版本提交。
+
 默认上传 Actions Artifact，包含 `openlist-frontend-dist-v版本.tar.gz` 和 `i18n.tar.gz`。勾选 `publish` 同时创建 GitHub Release；同名标签已存在时，需要新的自定义版本号。工作流不运行 lint 或测试，也不会向分支推送版本提交。
 
 独立脚本需要 Node、匹配 packageManager 的 pnpm，以及用于自动版本查询的 GitHub CLI（已登录或设置 `GH_TOKEN`）：

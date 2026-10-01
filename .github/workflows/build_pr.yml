@@ -1,10 +1,12 @@
-name: PR Build Check
+name: Manual Frontend Build
 
 on:
-  pull_request:
-    branches:
-      - main
-    types: [opened, synchronize, reopened]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "前端版本号；留空获取官方最新正式版号"
+        type: string
+        required: false
 
 jobs:
   build-check:
@@ -31,17 +33,20 @@ jobs:
 
       - name: Build and check
         run: |
-          chmod +x build.sh
-          ./build.sh --dev --no-compress --skip-i18n
+          bash build.sh --dev --no-compress --skip-i18n
+          echo "version=$(cat dist/VERSION)" >> "$GITHUB_OUTPUT"
+        id: build
         env:
           CROWDIN_PROJECT_ID: ${{ secrets.CROWDIN_PROJECT_ID }}
           CROWDIN_PERSONAL_TOKEN: ${{ secrets.CROWDIN_PERSONAL_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ inputs.version }}
           # OPENLIST_FRONTEND_BUILD_MODE: dev
           # OPENLIST_FRONTEND_BUILD_COMPRESS: false
 
       - name: Upload Build Artifacts
         uses: actions/upload-artifact@v7
         with:
-          name: openlist-frontend-dist-dev-${{ github.sha }}
+          name: openlist-frontend-dist-${{ steps.build.outputs.version }}
           path: dist/
           retention-days: 7

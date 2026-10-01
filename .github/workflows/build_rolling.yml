@@ -4,16 +4,17 @@
 #
 # - Upload the release assets to GitHub (always git tagged `edge`).
 #
-# This workflow can be triggered on pushes to the `main` branch, or manually via the GitHub Actions UI.
+# This workflow is triggered manually via the GitHub Actions UI.
 
 name: Rolling Build
 
 on:
-  push:
-    branches:
-      - main
   workflow_dispatch:
     inputs:
+      version:
+        description: "前端版本号；留空获取官方最新正式版号"
+        type: string
+        required: false
       draft:
         description: "Create draft release"
         required: false
@@ -50,6 +51,8 @@ jobs:
         env:
           CROWDIN_PROJECT_ID: ${{ secrets.CROWDIN_PROJECT_ID }}
           CROWDIN_PERSONAL_TOKEN: ${{ secrets.CROWDIN_PERSONAL_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ inputs.version }}
 
       - name: Read version and determine tag name
         id: version
@@ -69,9 +72,10 @@ jobs:
             --title "Pre-release ${{ steps.version.outputs.version }}" \
             --notes "Pre-release build for ${{ steps.version.outputs.version }}<br>This is a development build and not intended for production use." \
             --prerelease \
-            --draft=${{ github.event_name == 'workflow_dispatch' && github.event.inputs.draft || false }} \
+            --draft=${{ inputs.draft }} \
+            --target "$GITHUB_SHA" \
             ${{ steps.version.outputs.tag_name }} \
-            dist/openlist-frontend-dist-v*-*.tar.gz \
+            dist/openlist-frontend-dist-v*-dev.tar.gz \
             dist/i18n.tar.gz
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

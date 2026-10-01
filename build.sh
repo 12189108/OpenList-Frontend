@@ -23,7 +23,7 @@ log_build() { echo -e "${BLUE}$1${NC}"; }
 main() {
     parse_args "$@"
     set_defaults
-    check_git_version_and_commit
+    resolve_build_version
     update_package_version
     if [[ "$LITE_FLAG" == "true" ]]; then
         archive_name="openlist-frontend-dist-lite-${version_tag}"
@@ -60,10 +60,10 @@ display_help() {
     echo ""
     echo "Options (will overwrite environment setting):"
     echo "  --dev         Build development version"
-    echo "  --release     Build release version (will check if git tag match package.json version)"
+    echo "  --release     Build release version using explicit/latest stable version label"
     echo "  --compress    Create compressed archive"
     echo "  --no-compress Skip compression"
-    echo "  --enforce-tag Force git tag requirement for both dev and release builds"
+    echo "  --enforce-tag Require a local tag matching the resolved version (optional)"
     echo "  --skip-i18n   Skip i18n build step"
     echo "  --lite        Build lite version"
     echo "  --version VER Explicit release label, accepts v prefix; no git tag required"
@@ -73,6 +73,8 @@ display_help() {
     echo "  OPENLIST_FRONTEND_BUILD_COMPRESS=true|false (default: false)"
     echo "  OPENLIST_FRONTEND_BUILD_ENFORCE_TAG=true|false (default: false)"
     echo "  OPENLIST_FRONTEND_BUILD_SKIP_I18N=true|false (default: false)"
+    echo "  VERSION=version|auto (default: latest stable release version)"
+    echo "  VERSION_REPO=owner/repo (default: OpenListTeam/OpenList-Frontend)"
 }
 
 # Set default values from environment variables
@@ -84,49 +86,30 @@ set_defaults() {
     LITE_FLAG=${LITE_FLAG:-false}
 }
 
-# Check git version and commit
-check_git_version_and_commit() {
-    if [[ -n "${VERSION:-}" && "$BUILD_TYPE" == "release" && "$ENFORCE_TAG" != "true" ]]; then
-        git_version_clean=${VERSION#v}
-        if [[ ! "$git_version_clean" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?$ ]]; then
-            log_error "Invalid version: $VERSION"
+# Resolve labels from releases, independent of local tags or commit history.
+resolve_build_version() {
+    local value=${VERSION:-} token=${GH_TOKEN:-${GITHUB_TOKEN:-}}
+    local -a auth=()
+    if [[ -n "$token" ]]; then auth=(-H "Authorization: Bearer $token"); fi
+    if [[ -z "$value" || "$value" == "auto" ]]; then
+        local response
+        response=$(curl -fsSL --retry 3 --connect-timeout 15 --max-time 60 "${auth[@]}" \
+          -H 'Accept: application/vnd.github+json' \
+          "https://api.github.com/repos/${VERSION_REPO:-OpenListTeam/OpenList-Frontend}/releases/latest")
+        value=$(jq -er '.tag_name | select(type == "string" and length > 0)' <<< "$response")
+    fi
+    git_version_clean=${value#v}
+    if [[ ! "$git_version_clean" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?$ ]]; then
+        log_error "Invalid version: $value"
+        exit 1
+    fi
+    VERSION="v$git_version_clean"
+    if [[ "$ENFORCE_TAG" == "true" ]]; then
+        git show-ref --verify --quiet "refs/tags/$VERSION" || {
+            log_error "Required local tag is missing: $VERSION"
             exit 1
-        fi
-        git_version="v$git_version_clean"
-    elif [[ "$BUILD_TYPE" == "release" || "$ENFORCE_TAG" == "true" ]]; then
-        enforce_git_tag
-    else
-        fallback_git_tag
+        }
     fi
-    commit=$(git rev-parse --short HEAD)
-}
-
-# Enforce git tag for release builds
-enforce_git_tag() {
-    if ! git_version=$(git describe --abbrev=0 --tags 2>/dev/null); then
-        log_error "No git tags found. Release build requires a git tag."
-        log_warning "Please create a tag first, or use --dev for development builds."
-        exit 1
-    fi
-    validate_git_tag
-}
-
-# Validate git tag against package.json version
-validate_git_tag() {
-    package_version=$(grep '"version":' package.json | sed 's/.*"version": *"\([^"]*\)".*/\1/')
-    git_version_clean=${git_version#v}
-    if [[ "$git_version_clean" != "$package_version" ]]; then
-        log_error "Package.json version (${package_version}) does not match git tag (${git_version_clean})."
-        exit 1
-    fi
-}
-
-# Fallback to default git tag for development builds
-fallback_git_tag() {
-    git tag -d edge >/dev/null 2>&1 || true
-    git_version=$(git describe --abbrev=0 --tags 2>/dev/null || echo "v0.0.0")
-    git_version_clean=${git_version#v}
-    git_version_clean=${git_version_clean%%-*}
 }
 
 # Update package.json version
@@ -139,7 +122,7 @@ update_package_version() {
             sed -i "s/\"version\": *\"[^\"]*\"/\"version\": \"${git_version_clean}\"/" package.json
         fi
         log_success "Package.json version updated to ${git_version_clean}"
-        version_tag="v${git_version_clean}-${commit}"
+        version_tag="v${git_version_clean}-dev"
         log_build "Building DEV version ${version_tag}..."
     elif [[ "$BUILD_TYPE" == "release" ]]; then
         if [[ -n "${VERSION:-}" ]]; then

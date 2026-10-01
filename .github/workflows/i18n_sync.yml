@@ -1,12 +1,6 @@
 name: Sync i18n files
 
 on:
-  schedule:
-    - cron: "0 12 * * *"
-  push:
-    branches: [main]
-    paths:
-      - "src/lang/en/**"
   workflow_dispatch:
 
 jobs:
@@ -111,7 +105,6 @@ jobs:
           fi
 
       - name: Sync to Crowdin
-        if: ${{ steps.verify-changed-files.outputs.changed == 'true' || github.event_name == 'push' }}
         uses: ./.github/actions/sync_to_crowdin
         with:
           crowdin_project_id: ${{ secrets.CROWDIN_PROJECT_ID }}
