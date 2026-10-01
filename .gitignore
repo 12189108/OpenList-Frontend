@@ -1,7 +1,9 @@
 node_modules
 dist
+dist-lite
 /src/lang/*
 !/src/lang/en/
 .DS_Store
 .idea
 .test
+.codebuddy

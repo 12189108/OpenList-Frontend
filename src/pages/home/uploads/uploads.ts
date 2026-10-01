@@ -1,7 +1,10 @@
-import { objStore } from "~/store"
+import { getSettingBool, objStore } from "~/store"
 import { FormUpload } from "./form"
 import { StreamUpload } from "./stream"
 import { HttpDirectUpload } from "./direct"
+import { MultipartUpload } from "./multipart"
+import { ResumableUpload } from "./resumable"
+import { isGo } from "~/utils/backend"
 import { Upload } from "./types"
 
 type Uploader = {
@@ -10,8 +13,19 @@ type Uploader = {
   available: () => boolean
 }
 
-// All upload methods
+// The custom Go uploader persists sessions across server restarts. Official
+// multipart and its plain stream fallback remain independent upload methods.
 const AllUploads: Uploader[] = [
+  {
+    name: "Resumable",
+    upload: ResumableUpload,
+    available: isGo,
+  },
+  {
+    name: "Multipart",
+    upload: MultipartUpload,
+    available: () => getSettingBool("multipart_enabled"),
+  },
   {
     name: "HTTP Direct",
     upload: HttpDirectUpload,

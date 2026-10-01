@@ -27,12 +27,18 @@ const isPrior = (p: Prior): boolean => {
   return p()
 }
 
+export interface PreviewProps {
+  images?: Obj[]
+  navigate?: (name: string) => void
+  openWith?: boolean
+}
+
 export interface Preview {
   key: string
   type?: ObjType
   exts?: Ext
   provider?: RegExp
-  component: Component
+  component: Component<PreviewProps>
   prior: Prior
   availableInArchive?: boolean
 }
@@ -40,7 +46,7 @@ export interface Preview {
 export interface PreviewComponent {
   key: string
   name: string
-  component: Component
+  component: Component<PreviewProps>
 }
 
 const previews: Preview[] = [
@@ -92,6 +98,7 @@ const previews: Preview[] = [
   {
     key: "image",
     type: ObjType.IMAGE,
+    exts: ["heic", "heif", "avif", "vvc", "avc"], // libheif
     component: lazy(() => import("./image")),
     prior: true,
   },
@@ -119,12 +126,7 @@ const previews: Preview[] = [
     component: lazy(() => import("./plist")),
     prior: true,
   },
-  {
-    key: "heic",
-    exts: ["heic", "heif", "avif", "vvc", "avc", "jpeg", "jpg"],
-    component: lazy(() => import("./heic")),
-    prior: true,
-  },
+
   ...(import.meta.env.VITE_LITE === "true"
     ? []
     : [
@@ -143,13 +145,13 @@ const previews: Preview[] = [
   },
   {
     key: "xls",
-    exts: ["xlsx", "xls"],
+    exts: ["xlsx"],
     component: lazy(() => import("./xls")),
     prior: true,
   },
   {
     key: "doc",
-    exts: ["docx", "doc"],
+    exts: ["docx"],
     component: lazy(() => import("./doc")),
     prior: true,
   },
@@ -163,6 +165,12 @@ const previews: Preview[] = [
     key: "video360",
     type: ObjType.VIDEO,
     component: lazy(() => import("./video360")),
+    prior: true,
+  },
+  {
+    key: "torrent",
+    exts: ["torrent"],
+    component: lazy(() => import("./torrent")),
     prior: true,
   },
   {

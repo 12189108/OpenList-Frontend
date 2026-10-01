@@ -19,7 +19,7 @@ import {
   Type,
 } from "~/types"
 import { createStore, produce } from "solid-js/store"
-import { Item } from "./Item"
+import { Item, DriverMetadataItem } from "./Item"
 import { ResponsiveGrid } from "../common/ResponsiveGrid"
 
 interface DriverInfo {
@@ -162,7 +162,7 @@ const AddOrEdit = () => {
         <Show when={drivers()[storage.driver]}>
           <For each={drivers()[storage.driver].common}>
             {(item) => (
-              <Item
+              <DriverMetadataItem
                 {...item}
                 driver="common"
                 value={(storage as any)[item.name]}
@@ -174,7 +174,7 @@ const AddOrEdit = () => {
           </For>
           <For each={drivers()[storage.driver].additional}>
             {(item) => (
-              <Item
+              <DriverMetadataItem
                 {...item}
                 driver={storage.driver}
                 value={addition[item.name] as any}

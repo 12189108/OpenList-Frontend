@@ -170,4 +170,14 @@ const Item = (props: ItemProps) => {
   )
 }
 
+// Driver metadata arrives at runtime, so its `type` cannot be a literal enum
+// discriminant at the call site. Keep the strict Item props for static callers.
+export const DriverMetadataItem = (
+  props: DriverItem & {
+    driver: string
+    value: string | number | boolean
+    onChange: (value: any) => void
+  },
+) => <Item {...(props as ItemProps)} />
+
 export { Item }
