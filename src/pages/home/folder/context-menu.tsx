@@ -4,7 +4,7 @@ import "solid-contextmenu/dist/style.css"
 import { HStack, Icon, Text, useColorMode, Image } from "@hope-ui/solid"
 import { operations } from "../toolbar/operations"
 import { createMemo, For, Show } from "solid-js"
-import { bus, convertURL, notify, torrentParse } from "~/utils"
+import { bus, convertURL, notify, pathJoin, torrentParse } from "~/utils"
 import { ObjType, UserMethods } from "~/types"
 import {
   getSettingBool,
@@ -46,7 +46,7 @@ export const ContextMenu = () => {
     return UserMethods.is_admin(me()) || getSettingBool("package_download")
   }
   const { rawLink } = useLink()
-  const { isShare, pushHref, to } = useRouter()
+  const { isShare, pathname, pushHref, to } = useRouter()
   const openWithPreviews = createMemo(() => {
     const objs = selectedObjs()
     if (objs.length !== 1) return []
@@ -96,6 +96,19 @@ export const ContextMenu = () => {
         }}
       >
         <ItemContent name="share" />
+      </Item>
+      <Item
+        // 目录也可以生成种子：后端会递归展开目录下的所有文件
+        hidden={() => isShare() || !haveSelected()}
+        onClick={() => {
+          const objs = selectedObjs()
+          bus.emit("generate_transfer_seed", {
+            paths: objs.map((obj) => pathJoin(pathname(), obj.name)),
+            hasDir: objs.some((obj) => obj.is_dir),
+          })
+        }}
+      >
+        <ItemContent name="generate_transfer_seed" />
       </Item>
       <Item
         hidden={() => {

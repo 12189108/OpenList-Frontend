@@ -1,0 +1,211 @@
+// 媒体库类型定义
+
+export type MediaType = "video" | "music" | "image" | "book"
+
+// 选集信息（路径合并模式下文件夹内的每个媒体文件）
+export interface EpisodeInfo {
+  file_name: string // 原始文件名（含扩展名）
+  index: number // 序号，默认0，文件名开头有数字则取该数字
+  title: string // 选集标题（去掉序号后的文件名，不含扩展名）
+  season?: number // 季号，0/缺省表示未识别（按第 1 季展示）
+}
+
+export interface MediaItem {
+  id: number
+  created_at: string
+  updated_at: string
+  media_type: MediaType
+  scan_path_id: number
+  file_name: string
+  file_size: number
+  mime_type: string
+  hidden: boolean
+  // 刮削信息
+  scraped_name: string
+  description: string
+  cover: string
+  release_date: string
+  rating: number
+  genre: string
+  authors: string // JSON数组字符串
+  plot: string
+  reviews: string
+  external_id: string
+  // 音乐
+  album_name: string
+  album_artist: string
+  track_number: number
+  duration: number
+  lyrics: string
+  // 视频
+  video_type: string
+  season: number
+  episode: number
+  // 书籍
+  publisher: string
+  isbn: string
+  // 目录
+  is_folder: boolean
+  folder_path: string // 扫描根路径（恒定为扫描路径，与 file_name + album_name 组合唯一）
+  episodes: string // 选集信息 JSON 字符串，格式：[{file_name,index,title},...]
+  scraped_at: string | null
+}
+
+// 解析 episodes JSON 字符串。
+// JSON 合法但不是数组（如 "{}"）时必须返回空数组：调用方会直接当列表用（.length / <For>），
+// 非数组会让选集渲染或分页计算直接炸掉。
+export function parseEpisodes(episodes: string): EpisodeInfo[] {
+  if (!episodes) return []
+  try {
+    const parsed = JSON.parse(episodes)
+    return Array.isArray(parsed) ? (parsed as EpisodeInfo[]) : []
+  } catch {
+    return []
+  }
+}
+
+export interface AlbumInfo {
+  album_name: string
+  album_artist: string
+  cover: string
+  release_date: string
+  track_count: number
+  scan_path_id: number
+}
+
+export interface ArtistInfo {
+  artist: string
+  album_count: number
+  track_count: number
+  cover: string
+  scan_path_id: number
+}
+
+/** 图片 EXIF 摘要（后端按需解析，字段为空表示该图没有对应信息） */
+export interface MediaExif {
+  available: boolean
+  format?: string
+  width?: number
+  height?: number
+  camera?: string
+  lens?: string
+  software?: string
+  exposure?: string
+  aperture?: string
+  iso?: string
+  focal_length?: string
+  taken_at?: string
+  latitude?: number
+  longitude?: number
+}
+
+export interface MediaConfig {
+  id?: number
+  media_type: MediaType
+  enabled: boolean
+  last_scan_at: string | null
+  last_scrape_at: string | null
+  /** 该类型独立的刮削配置 JSON：store_thumbnail / thumbnail_mode / thumbnail_path */
+  scraper_config?: string
+}
+
+// 扫描路径配置
+export interface MediaScanPath {
+  id?: number
+  media_type: MediaType
+  name: string
+  path: string
+  path_merge: boolean
+  /**
+   * 合并深度：0 = 自动；1 = 剧名（扫描根的直接子文件夹）下面的第一层作为条目
+   * （如 /电视剧/群星/第一季、第二季），2 = 再往下一层。
+   */
+  merge_depth?: number
+  type_tag: string // 类型标签：电影、电视剧等
+  content_tags: string // 内容标签：喜剧、惊悚等（逗号分隔）
+  enable_scrape: boolean
+  last_scan_at: string | null
+}
+
+export interface MediaScanProgress {
+  media_type: MediaType
+  scan_path_id?: number
+  running: boolean
+  total: number
+  done: number
+  message: string
+  error?: string
+}
+
+export interface MediaListQuery {
+  media_type?: MediaType
+  scan_path_id?: number
+  page?: number
+  page_size?: number
+  order_by?: "name" | "date" | "size"
+  order_dir?: "asc" | "desc"
+  folder_path?: string
+  keyword?: string
+  type_tag?: string
+  content_tag?: string
+}
+
+// 解析 authors JSON 字符串。
+// 同样要求解析结果是数组：非法 JSON 或非数组都回退成原始字符串，
+// 否则调用方拿到的不是 string[]，.slice / .join 会直接报错。
+export function parseAuthors(authors: string): string[] {
+  if (!authors) return []
+  try {
+    const parsed = JSON.parse(authors)
+    if (Array.isArray(parsed)) {
+      return parsed.map((a) => String(a))
+    }
+    return [authors]
+  } catch {
+    return [authors]
+  }
+}
+
+// 格式化时长（秒 -> mm:ss）
+export function formatDuration(seconds: number): string {
+  if (!seconds) return "0:00"
+  const m = Math.floor(seconds / 60)
+  const s = seconds % 60
+  return `${m}:${s.toString().padStart(2, "0")}`
+}
+
+// 获取媒体显示名称
+export function getMediaName(item: MediaItem): string {
+  return item.scraped_name || item.file_name || ""
+}
+
+/**
+ * 是否为光盘镜像（.iso / 原盘）。
+ *
+ * 浏览器没有 UDF / ISO 9660 解复用能力，`<video>`、mediabunny、HLS 都读不了，
+ * 只能交给本地播放器（VLC/PotPlayer）或先下载再挂载。扫描端仍会把 .iso 入库，
+ * 所以界面要主动拦住「浏览器播放」，而不是让播放器报一个看不懂的错误。
+ */
+export function isDiscImage(name?: string | null): boolean {
+  return /\.iso$/i.test((name ?? "").trim())
+}
+
+// 获取媒体文件的VFS路径（folder_path + "/" + file_name）
+// 可选传入 episodeFileName 用于播放文件夹条目中的某个选集
+export function getMediaFilePath(
+  item: MediaItem,
+  episodeFileName?: string,
+): string {
+  const folder = item.folder_path?.replace(/\/$/, "") ?? ""
+  const fileName = episodeFileName ?? item.file_name ?? ""
+  if (!fileName) return folder
+  return `${folder}/${fileName}`
+}
+
+// 媒体类型标签
+export const mediaTypeLabels: Record<MediaType, string> = {
+  video: "影视",
+  music: "音乐",
+  image: "图片",
+  book: "书籍",
+}

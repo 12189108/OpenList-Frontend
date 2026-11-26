@@ -61,7 +61,7 @@ export const Obj = () => {
   )
 
   const isStorageError = createMemo(() => {
-    const err = objStore.err
+    const err = objStore.err ?? ""
     return (
       err.includes("storage not found") || err.includes("please add a storage")
     )
@@ -93,7 +93,6 @@ export const Obj = () => {
             <Error
               msg={objStore.err}
               disableColor
-              show404Face={isShare() && objStore.err === t("shares.share_gone")}
               actions={
                 shouldShowStorageButton() ? storageErrorActions() : undefined
               }

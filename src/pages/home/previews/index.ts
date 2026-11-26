@@ -126,17 +126,12 @@ const previews: Preview[] = [
     component: lazy(() => import("./plist")),
     prior: true,
   },
-
-  ...(import.meta.env.VITE_LITE === "true"
-    ? []
-    : [
-        {
-          key: "pdf",
-          exts: ["pdf"],
-          component: lazy(() => import("./pdf")),
-          prior: true,
-        },
-      ]),
+  {
+    key: "pdf",
+    exts: ["pdf"],
+    component: lazy(() => import("./pdf")),
+    prior: true,
+  },
   {
     key: "ppt",
     exts: ["pptx"],
@@ -169,7 +164,7 @@ const previews: Preview[] = [
   },
   {
     key: "torrent",
-    exts: ["torrent"],
+    exts: ["torrent", "cas", "oss"],
     component: lazy(() => import("./torrent")),
     prior: true,
   },
